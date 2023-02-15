@@ -3,10 +3,13 @@ var Salasana = new class {
         var url = window.top.location.href
         this._seed = url.split('/')[2];
         console.log(this._seed);
-        this.init();
+        (async () => {
+            await this.reset(true);
+            await this.init();
+        })();
     }
 
-    async reset() {
+    async reset(atStart = false) {
         this._passwords = (await this.getAt('key')) || "";
         console.log(this._passwords)
         this._isView = (await this.getAt('isView')) || false;
@@ -18,15 +21,17 @@ var Salasana = new class {
             if (this._isView && input.type == 'password') {
                 input.setAttribute("Salasana", "true");
                 input.type = 'text';
-            } 
+            }
             if (input.getAttribute("Salasana") == "true" && !this._isView) {
                 input.type = 'password';
                 input.removeAttribute("Salasana");
             }
             if (input.type == 'password' || input.getAttribute("Salasana") == "true") {
-                var generated = this.generatePassword();
-                input.value = generated;
                 havePassword = true;
+                if (atStart) {
+                    var generated = this.generatePassword();
+                    input.value = generated;
+                }
             }
         }
         return havePassword;
@@ -34,6 +39,7 @@ var Salasana = new class {
 
     async init() {
         var havePassword = (await this.reset());
+        var debug = (await this.getAt('debug')) || false;
         console.log(havePassword);
         if (havePassword) {
             var div = document.createElement('div');
@@ -47,17 +53,34 @@ var Salasana = new class {
                 padding: 10px;
                 text-align: center;
                 z-index: 9999`;
-            var p = document.createElement('p');
-            p.innerHTML = "Salasana: " + this._passwords + "<br> Seed: " + this._seed;
-            div.appendChild(p);
-            var b = document.createElement('button');
-            b.innerHTML = "View passwords";
-            b.onclick = async () => {
-                this._isView = !this._isView;
-                await this.saveAt('isView', this._isView);
-                await this.reset();
+            if (debug) {
+                div.appendChild((() => {
+                    var p = document.createElement('p');
+                    p.innerHTML = "Salasana: " + this._passwords + "<br> Seed: " + this._seed;
+                    return p;
+                })());
             }
-            div.appendChild(b);
+            div.appendChild((() => {
+                var b = document.createElement('button');
+                b.innerHTML = "debug";
+                b.onclick = async () => {
+                    this._debug = !this._debug;
+                    await this.saveAt('debug', this._debug);
+                    document.body.removeChild(div);
+                    await this.init();
+                }
+                return b;
+            })());
+            div.appendChild((() => {
+                var b = document.createElement('button');
+                b.innerHTML = "View passwords";
+                b.onclick = async () => {
+                    this._isView = !this._isView;
+                    await this.saveAt('isView', this._isView);
+                    await this.reset();
+                }
+                return b;
+            })());
             document.body.prepend(div);
         }
     }
@@ -83,7 +106,21 @@ var Salasana = new class {
 
             return 4294967296 * (2097151 & h2) + (h1 >>> 0);
         };
-        return cyrb53(this._passwords, this._seed).toString(36);
+        const length = 16;
+        const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*_:;?,.+-";
+        const seed = parseInt(this._seed, 36);
+        var hashed = cyrb53(this._passwords, seed);
+        var toHash = hashed;
+        var password = "";
+        for (var i = 0; i < length; i++) {
+            password += charset[toHash % charset.length];
+            toHash = Math.floor(toHash / charset.length);
+            if (toHash < charset.length) {
+                hashed = cyrb53((toHash + hashed).toString(36), seed);
+                toHash = hashed;
+            }
+        }
+        return password;
     }
 
     async saveAt(name, value) {
