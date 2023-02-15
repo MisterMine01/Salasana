@@ -56,7 +56,7 @@ var Salasana = new class {
             if (debug) {
                 div.appendChild((() => {
                     var p = document.createElement('p');
-                    p.innerHTML = "Salasana: " + this._passwords + "<br> Seed: " + this._seed;
+                    p.textContent = "Salasana: " + this._passwords + "<br> Seed: " + this._seed;
                     return p;
                 })());
             }
